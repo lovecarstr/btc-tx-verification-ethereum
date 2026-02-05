@@ -2,27 +2,20 @@
 
 This repository contains my coursework implementation for **ICT3009**, built in **Solidity** and tested using **Foundry**.
 
-Implemented features (Tasks 1–4):
+## What this implements (Tasks 1–5)
 - Bitcoin utilities: double-SHA256, endianness helpers, VarInt parsing
 - Bitcoin-style Merkle proof verification (double-SHA256 parent hashing)
 - Bitcoin block header chain verification that stores **only block hashes** + heights (not full headers)
-- ERC-20 token (initial supply = 0, internal mint, burn support)
+- ERC-20 token (initial supply = 0, mint only via transaction verification, burn supported)
 - Transaction verification that proves a **P2PKH or P2PK** transaction output is included in a known block, then mints ERC-20 tokens equal to the output value (satoshis)
+- Unified workflow (oracle submits headers → user submits tx proof → contract verifies & mints)
 
 ---
 
-## Foundry
+## Tooling
+This project uses **Foundry** (`forge`, `cast`, `anvil`).
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
-
-Foundry consists of:
-- **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools)
-- **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data
-- **Anvil**: Local Ethereum node, akin to Ganache / Hardhat Network
-- **Chisel**: Fast Solidity REPL
-
-### Documentation
-https://book.getfoundry.sh/
+Install docs: https://book.getfoundry.sh/
 
 ---
 
@@ -30,16 +23,16 @@ https://book.getfoundry.sh/
 
 ### Contracts (`src/`)
 - `BTCUtils.sol`  
-  Bitcoin helper library: `sha256d`, `reverseBytes32`, LE reads, VarInt parsing, slice helpers.
+  Bitcoin helper library: `sha256d`, `reverseBytes32`, endianness helpers, parsing helpers.
 
 - `MerkleProofBTC.sol`  
   Verifies Bitcoin-style Merkle proofs using double-SHA256 at each parent.
 
 - `BitcoinHeaderChain.sol`  
-  **Task 2**: accepts 80-byte Bitcoin headers and stores only:
+  Accepts 80-byte Bitcoin headers and stores only:
   - `blockHash -> height`
   - `blockHash -> merkleRoot` (needed for Task 4)
-  
+
   Verifies:
   - header length = 80 bytes
   - `prevBlockHash` references a previously stored block
@@ -48,23 +41,36 @@ https://book.getfoundry.sh/
   - minimum difficulty requirement (70 billion)
 
 - `BtcVerifierToken.sol`  
-  **Task 3 + Task 4**: ERC-20 + verify-and-mint logic  
-  Includes:
-  - ERC-20: `totalSupply`, `balanceOf`, `transfer`, `approve`, `allowance`, `transferFrom`, `Transfer`, `Approval`
+  ERC-20 + verify-and-mint logic:
+  - ERC-20: `totalSupply`, `balanceOf`, `transfer`, `approve`, `allowance`, `transferFrom`, events
   - initial supply = **0**
-  - minting is **internal** (triggered by verification, not user-callable)
-  - burn + optional burnFrom
-  - **Task 4**: `verifyTransaction(...)` (required signature) and optional `verifyTransactionTo(...)`
+  - minting is **not user-callable** (triggered by verification)
+  - burn + burnFrom
+  - Required interface: `verifyTransaction(bytes,bytes32[],uint256,bytes32)`
 
 ### Tests (`test/`)
 - `BTCUtils.t.sol` — BTC utils tests
 - `MerkleProof.t.sol` — Merkle proof verifier tests
-- `HeaderChain.t.sol` — block header submission / chaining / PoW tests
-- `BtcVerifierToken.t.sol` — ERC-20 tests
-- `VerifyTransaction.t.sol` — Task 4 transaction verification tests (P2PKH/P2PK, segwit txid stripping, double validation prevention, etc.)
+- `HeaderChain.t.sol` — header submission / chaining / PoW tests
+- `BtcVerifierToken_ERC20.t.sol` — ERC-20 behavior tests
+- `VerifyTransaction.t.sol` — Task 4 tx verification tests
+- `Integration.t.sol` — end-to-end header → verifyTx → mint
+- `UnifiedSystem.t.sol` — integrated "Task 5 style" system flow tests
+- `OracleFlow.t.sol` — oracle access control flow tests
+
+### Fixtures (`test/fixtures`)
+- `sample_header.hex`
+- `sample_tx.hex`
+- `sample_proof.json`
 
 ### Docs (`docs/`)
-- `docs/TASK4.md` — Task 4 write-up, including the required note about PKH vs Ethereum addresses and suggested improvements
+- `docs/ai-prompts.md` — log of AI prompts used during development (coursework requirement)
+- `docs/TASK4.md` — Task 4 write-up + required explanation about PKH vs Ethereum addresses + suggested improvements
+
+### Scripts (`script/`)
+- `Deploy.s.sol` — deployment script
+- `DemoFlow.s.sol` — demonstrates a full flow (submit header, verify tx, observe mint)
+- `make_integration_fixtures.py` — helper for generating fixtures
 
 ---
 
@@ -72,10 +78,10 @@ https://book.getfoundry.sh/
 
 Bitcoin serialization uses little-endian in multiple places, so this repo uses explicit conventions:
 
-- **Stored block hashes** are **canonical/explorer-style** bytes32:
+- **Stored block hashes** are **canonical/explorer-style** `bytes32`:
   - `blockHashCanonical = reverseBytes32(sha256d(header))`
 
-- The block’s **Merkle root** is stored **exactly as it appears in the header field** (internal order / header byte order).
+- The block's **Merkle root** is stored **exactly as it appears in the header field** (header byte order).
 
 - Transaction ID used in Merkle proof verification:
   - **Legacy txid** = `sha256d(fullTxBytes)`
@@ -86,42 +92,123 @@ Merkle verification expects all hashes passed in the same byte order that the ha
 
 ---
 
-## Task coverage summary
+## Build + test
 
-### Task 1 — Merkle proof verifier
-Implemented in `MerkleProofBTC.sol` and tested in `test/MerkleProof.t.sol`.
+### Build
+```sh
+forge build
+```
 
-### Task 2 — Bitcoin block header verification system
-Implemented in `BitcoinHeaderChain.sol` and tested in `test/HeaderChain.t.sol`.
-- Accepts 80-byte headers
-- Computes block hash (double SHA256 + correct endianness)
-- Decodes `bits` → target, verifies PoW
-- Enforces minimum difficulty requirement (70B)
-- Verifies chaining via `prevBlockHash`
-- Maintains `hash -> height`
-- Stores each block’s Merkle root for Task 4
-
-### Task 3 — ERC-20 token
-Implemented in `BtcVerifierToken.sol` and tested in `test/BtcVerifierToken.t.sol`.
-- ERC-20 compliant interface and events
-- initial supply = 0
-- mint is internal only
-- burn support
-
-### Task 4 — Verify P2PKH/P2PK tx inclusion + mint ERC-20
-Implemented in `BtcVerifierToken.sol` and tested in `test/VerifyTransaction.t.sol`.
-- Validates `blockHash` is known
-- Verifies Merkle proof using Task 1
-- Prevents validating the same tx twice
-- Parses transaction and requires exactly **2 outputs**
-- Validates output0 scriptPubKey is **P2PKH** or **P2PK**
-- Mints tokens equal to output0 value (satoshis) to address derived from output0 PKH
-- Optional helper `verifyTransactionTo(...)` enforces an expected PKH while keeping required signature intact
+### Test
+```sh
+forge test -vvv
+```
 
 ---
 
-## Usage
+## Deploy + interact
 
-### Build
-```shell
-forge build
+### Option A — Local (Anvil)
+
+**Terminal 1:**
+```sh
+anvil
+```
+
+**Terminal 2 (set env vars):**
+```sh
+export RPC_URL="http://127.0.0.1:8545"
+
+# anvil account (0) private key (shown when you run anvil)
+export PRIVATE_KEY="0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+
+# Contract constructor inputs
+export CHECKPOINT_HASH="0x00000000000000000001919a930d370882a7712e0fb8cfb69bd4a9cc58077311"
+export CHECKPOINT_HEIGHT="800000"
+export TARGET_PKH="0x91ff9f2eed45fe06fab4875df1bd40b1d77d1bfc"
+
+# Token metadata (optional)
+export TOKEN_NAME="BTC Verifier Token"
+export TOKEN_SYMBOL="BVT"
+```
+
+**Deploy:**
+```sh
+forge script script/Deploy.s.sol:Deploy --rpc-url "$RPC_URL" --private-key "$PRIVATE_KEY" --broadcast -vvv
+```
+
+The deploy script prints the deployed contract address.
+
+---
+
+### Example interactions
+
+#### Interaction 1 — Full "Task 5 flow" demo (deploy + submit header + verify tx)
+
+This uses the provided fixtures:
+
+```sh
+export HEADER_HEX_PATH="test/fixtures/sample_header.hex"
+export TX_HEX_PATH="test/fixtures/sample_tx.hex"
+export PROOF_JSON_PATH="test/fixtures/sample_proof.json"
+export TX_INDEX="4"
+export BLOCK_HASH="0x0000000000000000000226ab487ff1a8456a30feb1bde3d65b6a67128074e19a"
+
+forge script script/DemoFlow.s.sol:DemoFlow --rpc-url "$RPC_URL" --private-key "$PRIVATE_KEY" --broadcast -vvv
+```
+
+You should see logs confirming:
+- header accepted
+- block known + height assigned
+- transaction verified
+- mint succeeded
+
+#### Interaction 2 — Query minted balance (cast)
+
+After DemoFlow, the minted recipient is the pseudo-recipient derived from TARGET_PKH.
+In this implementation, it is simply the Ethereum-style address with the same 20 bytes as TARGET_PKH:
+
+```sh
+export RECIP="0x91FF9f2Eed45fe06FaB4875DF1BD40B1d77D1bFc"
+```
+
+Set TOKEN to the deployed contract address printed by Deploy/DemoFlow:
+
+```sh
+export TOKEN="0xYOUR_DEPLOYED_CONTRACT_ADDRESS"
+
+cast call "$TOKEN" "totalSupply()(uint256)" --rpc-url "$RPC_URL"
+cast call "$TOKEN" "balanceOf(address)(uint256)" "$RECIP" --rpc-url "$RPC_URL"
+```
+
+---
+
+### Option B — Public testnet deployment
+
+Set:
+
+```sh
+export RPC_URL="https://YOUR_RPC_URL"
+export PRIVATE_KEY="0xYOUR_PRIVATE_KEY"
+
+export CHECKPOINT_HASH="0x..."
+export CHECKPOINT_HEIGHT="..."
+export TARGET_PKH="0x..."   # 20-byte HASH160 (0x + 40 hex chars)
+```
+
+Deploy:
+
+```sh
+forge script script/Deploy.s.sol:Deploy --rpc-url "$RPC_URL" --private-key "$PRIVATE_KEY" --broadcast -vvv
+```
+
+(Optional) contract verification (if you are using a supported explorer and have an API key):
+
+```sh
+export ETHERSCAN_KEY="YOUR_KEY"
+forge script script/Deploy.s.sol:Deploy --rpc-url "$RPC_URL" --private-key "$PRIVATE_KEY" --broadcast --verify --etherscan-api-key "$ETHERSCAN_KEY" -vvv
+```
+
+## Notes (Task 4 requirement: PKH vs Ethereum address)
+
+The contract mints tokens to a pseudo-address derived from the 20-byte Bitcoin `pubKeyHash` (HASH160). This is not a trustless mapping to a real Ethereum wallet. See `docs/TASK4.md` for the required explanation and proposed improvements (claim flows / signatures / oracle attestations).

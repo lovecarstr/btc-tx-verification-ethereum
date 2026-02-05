@@ -2,13 +2,24 @@
 pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
-
 import {BtcVerifierToken} from "../src/BtcVerifierToken.sol";
 
 /// @notice Test-only harness to access internal mint for ERC-20 tests (Task 3).
 contract BtcVerifierTokenHarness is BtcVerifierToken {
-    constructor(bytes32 checkpointHash, uint256 checkpointHeight, string memory name_, string memory symbol_)
-        BtcVerifierToken(checkpointHash, checkpointHeight, name_, symbol_)
+    constructor(
+        bytes32 checkpointHash,
+        uint256 checkpointHeight,
+        string memory name_,
+        string memory symbol_,
+        bytes20 targetPKH_
+    )
+        BtcVerifierToken(
+            checkpointHash,
+            checkpointHeight,
+            name_,
+            symbol_,
+            targetPKH_
+        )
     {}
 
     function mintForTest(address to, uint256 amount) external {
@@ -24,7 +35,11 @@ contract BtcVerifierTokenERC20Test is Test {
     address carl;
 
     event Transfer(address indexed from, address indexed to, uint256 value);
-    event Approval(address indexed owner, address indexed spender, uint256 value);
+    event Approval(
+        address indexed owner,
+        address indexed spender,
+        uint256 value
+    );
 
     function setUp() public {
         alice = makeAddr("alice");
@@ -32,13 +47,14 @@ contract BtcVerifierTokenERC20Test is Test {
         carl = makeAddr("carl");
 
         // ERC-20 tests don't depend on real Bitcoin headers.
-        // Any checkpoint hash/height is fine as long as constructor accepts it.
-        token = new BtcVerifierTokenHarness(bytes32(uint256(1)), 12345, "BTC Verifier Token", "BVT");
+        token = new BtcVerifierTokenHarness(
+            bytes32(uint256(1)),
+            12345,
+            "BTC Verifier Token",
+            "BVT",
+            bytes20(uint160(1))
+        );
     }
-
-    // -----------------------
-    // Metadata + initial state
-    // -----------------------
 
     function test_metadata_and_initial_supply() public view {
         assertEq(token.totalSupply(), 0, "initial supply must be 0");
@@ -46,14 +62,9 @@ contract BtcVerifierTokenERC20Test is Test {
         assertEq(token.name(), "BTC Verifier Token");
         assertEq(token.symbol(), "BVT");
 
-        // Decimals can be 8 (satoshis) or 18 (ERC-20 convention).
         uint8 d = token.decimals();
         assertTrue(d == 8 || d == 18, "unexpected decimals");
     }
-
-    // -----------------------
-    // Mint (internal-only) via harness
-    // -----------------------
 
     function test_mintForTest_increases_supply_and_balance_and_emits() public {
         vm.expectEmit(true, true, false, true);
@@ -69,10 +80,6 @@ contract BtcVerifierTokenERC20Test is Test {
         vm.expectRevert("mint to zero");
         token.mintForTest(address(0), 1);
     }
-
-    // -----------------------
-    // transfer
-    // -----------------------
 
     function test_transfer_reverts_on_insufficient_balance() public {
         vm.prank(alice);
@@ -103,10 +110,6 @@ contract BtcVerifierTokenERC20Test is Test {
         assertEq(token.totalSupply(), 10);
     }
 
-    // -----------------------
-    // approve + allowance
-    // -----------------------
-
     function test_approve_sets_allowance_and_emits() public {
         vm.prank(alice);
         vm.expectEmit(true, true, false, true);
@@ -119,15 +122,10 @@ contract BtcVerifierTokenERC20Test is Test {
     }
 
     function test_approve_to_zero_reverts_if_enforced() public {
-        // If your implementation allows approve(address(0), amount), delete/adjust this test.
         vm.prank(alice);
         vm.expectRevert("approve to zero");
         token.approve(address(0), 1);
     }
-
-    // -----------------------
-    // transferFrom
-    // -----------------------
 
     function test_transferFrom_reverts_on_insufficient_allowance() public {
         token.mintForTest(alice, 10);
@@ -138,7 +136,6 @@ contract BtcVerifierTokenERC20Test is Test {
     }
 
     function test_transferFrom_reverts_on_insufficient_balance() public {
-        // Alice approves, but has no balance
         vm.prank(alice);
         token.approve(bob, 5);
 
@@ -147,7 +144,9 @@ contract BtcVerifierTokenERC20Test is Test {
         token.transferFrom(alice, carl, 1);
     }
 
-    function test_transferFrom_success_moves_balance_and_decreases_allowance() public {
+    function test_transferFrom_success_moves_balance_and_decreases_allowance()
+        public
+    {
         token.mintForTest(alice, 10);
 
         vm.prank(alice);
@@ -175,14 +174,8 @@ contract BtcVerifierTokenERC20Test is Test {
         vm.prank(bob);
         token.transferFrom(alice, carl, 3);
 
-        // If you implement "infinite allowance doesn't decrease", this should stay max.
-        // If you don't, you can delete this test.
         assertEq(token.allowance(alice, bob), type(uint256).max);
     }
-
-    // -----------------------
-    // burn (recommended by Task 3 design)
-    // -----------------------
 
     function test_burn_reverts_if_insufficient_balance() public {
         vm.prank(alice);
@@ -204,24 +197,18 @@ contract BtcVerifierTokenERC20Test is Test {
         assertEq(token.totalSupply(), 6);
     }
 
-    // -----------------------
-    // burnFrom (OPTIONAL) – test via low-level call so tests still compile if you omit burnFrom.
-    // -----------------------
-
     function test_burnFrom_optional() public {
         token.mintForTest(alice, 10);
 
-        // Approve bob to burn 5
         vm.prank(alice);
         token.approve(bob, 5);
 
-        // If burnFrom exists, it should succeed and reduce allowance/balance/supply.
-        // If it doesn't exist, the call will fail and we treat it as "feature not implemented".
         vm.prank(bob);
-        (bool ok,) = address(token).call(abi.encodeWithSignature("burnFrom(address,uint256)", alice, 4));
+        (bool ok, ) = address(token).call(
+            abi.encodeWithSignature("burnFrom(address,uint256)", alice, 4)
+        );
 
         if (!ok) {
-            // burnFrom not implemented: acceptable if you chose burn-only design.
             return;
         }
 

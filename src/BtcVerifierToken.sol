@@ -25,17 +25,29 @@ contract BtcVerifierToken is BitcoinHeaderChain, MerkleProofBTC {
     // ----------------
     mapping(bytes32 => bool) public validatedTx; // txid (digest/internal order) -> used
 
+    /// @notice The “specific Bitcoin address” requirement is enforced by storing its HASH160 (pubKeyHash).
+    /// @dev For P2PKH: script includes this hash directly.
+    ///      For P2PK: we hash160(pubkey) and compare to this.
+    bytes20 public immutable TARGET_PKH;
+
     // ----------------
     // ERC-20 Events
     // ----------------
     event Transfer(address indexed from, address indexed to, uint256 value);
-    event Approval(address indexed owner, address indexed spender, uint256 value);
+    event Approval(
+        address indexed owner,
+        address indexed spender,
+        uint256 value
+    );
 
     // ----------------
     // Task 4 Events (nice-to-have)
     // ----------------
     event TransactionVerified(
-        bytes32 indexed txid, bytes32 indexed blockHash, bytes20 indexed pubKeyHash, uint64 valueSats
+        bytes32 indexed txid,
+        bytes32 indexed blockHash,
+        bytes20 indexed pubKeyHash,
+        uint64 valueSats
     );
 
     // ----------------
@@ -50,13 +62,21 @@ contract BtcVerifierToken is BitcoinHeaderChain, MerkleProofBTC {
         _;
     }
 
-    constructor(bytes32 checkpointHash, uint256 checkpointHeight, string memory name_, string memory symbol_)
-        BitcoinHeaderChain(checkpointHash, checkpointHeight)
-    {
+    constructor(
+        bytes32 checkpointHash,
+        uint256 checkpointHeight,
+        string memory name_,
+        string memory symbol_,
+        bytes20 targetPKH_
+    ) BitcoinHeaderChain(checkpointHash, checkpointHeight) {
+        require(targetPKH_ != bytes20(0), "target pkh zero");
+
         _name = name_;
         _symbol = symbol_;
         _decimals = 8; // satoshi-like base unit
         _totalSupply = 0;
+
+        TARGET_PKH = targetPKH_;
 
         oracle = msg.sender;
         emit OracleChanged(address(0), oracle);
@@ -85,7 +105,10 @@ contract BtcVerifierToken is BitcoinHeaderChain, MerkleProofBTC {
         return _balances[a];
     }
 
-    function allowance(address owner, address spender) external view returns (uint256) {
+    function allowance(
+        address owner,
+        address spender
+    ) external view returns (uint256) {
         return _allowances[owner][spender];
     }
 
@@ -104,7 +127,11 @@ contract BtcVerifierToken is BitcoinHeaderChain, MerkleProofBTC {
         return true;
     }
 
-    function transferFrom(address from, address to, uint256 amount) external returns (bool) {
+    function transferFrom(
+        address from,
+        address to,
+        uint256 amount
+    ) external returns (bool) {
         require(from != address(0), "from zero");
         require(to != address(0), "to zero");
 
@@ -148,35 +175,13 @@ contract BtcVerifierToken is BitcoinHeaderChain, MerkleProofBTC {
 
     /// @notice Prove `transaction` is included in `blockHash` and mint tokens to output0 recipient PKH.
     /// @dev Supports legacy and SegWit txid rules (SegWit txid excludes marker/flag + witness).
+    ///      Enforces that output0 is to the specific Bitcoin address (TARGET_PKH), as required by spec. :contentReference[oaicite:1]{index=1}
     function verifyTransaction(
         bytes memory transaction,
         bytes32[] memory merkleProof,
         uint256 txIndex,
         bytes32 blockHash
     ) public returns (bool) {
-        return _verifyTransactionCore(transaction, merkleProof, txIndex, blockHash, false, bytes20(0));
-    }
-
-    /// @notice STRONGER variant: also enforce output0 pays to `expectedPKH` (20-byte HASH160).
-    /// @dev This strictly satisfies "specific Bitcoin address" while keeping required interface intact.
-    function verifyTransactionTo(
-        bytes memory transaction,
-        bytes32[] memory merkleProof,
-        uint256 txIndex,
-        bytes32 blockHash,
-        bytes20 expectedPKH
-    ) public returns (bool) {
-        return _verifyTransactionCore(transaction, merkleProof, txIndex, blockHash, true, expectedPKH);
-    }
-
-    function _verifyTransactionCore(
-        bytes memory transaction,
-        bytes32[] memory merkleProof,
-        uint256 txIndex,
-        bytes32 blockHash,
-        bool enforceExpected,
-        bytes20 expectedPKH
-    ) internal returns (bool) {
         // 1) Validate block hash
         require(isKnown(blockHash), "unknown block");
 
@@ -195,13 +200,14 @@ contract BtcVerifierToken is BitcoinHeaderChain, MerkleProofBTC {
         validatedTx[txid] = true;
 
         // 6) Parse tx and validate first output script (must be P2PKH or P2PK)
-        (uint64 valueSats, bytes20 pubKeyHash) = _parseFirstOutputAndExtractPKH(transaction);
+        (uint64 valueSats, bytes20 pubKeyHash) = _parseFirstOutputAndExtractPKH(
+            transaction
+        );
 
-        if (enforceExpected) {
-            require(pubKeyHash == expectedPKH, "wrong recipient");
-        }
+        // 7) Enforce “specific Bitcoin address” requirement (spec)
+        require(pubKeyHash == TARGET_PKH, "wrong recipient");
 
-        // 7) Mint ERC-20 tokens equal to satoshis to pseudo-address derived from PKH
+        // 8) Mint ERC-20 tokens equal to satoshis to pseudo-address derived from PKH
         address pseudoRecipient = _pkhToAddress(pubKeyHash);
         _mint(pseudoRecipient, uint256(valueSats));
 
@@ -215,7 +221,9 @@ contract BtcVerifierToken is BitcoinHeaderChain, MerkleProofBTC {
 
     /// @notice Task 5 workflow helper: oracle submits headers through this entrypoint.
     /// @dev This does NOT remove permissionless submission; it just makes the “oracle flow” explicit.
-    function oracleSubmitBlockHeader(bytes calldata header) external onlyOracle returns (bool) {
+    function oracleSubmitBlockHeader(
+        bytes calldata header
+    ) external onlyOracle returns (bool) {
         return submitBlockHeader(header);
     }
 
@@ -260,12 +268,16 @@ contract BtcVerifierToken is BitcoinHeaderChain, MerkleProofBTC {
     // ----------------
     // TXID computation (legacy + segwit-safe)
     // ----------------
-    function _computeTxid(bytes memory txBytes) internal pure returns (bytes32) {
+    function _computeTxid(
+        bytes memory txBytes
+    ) internal pure returns (bytes32) {
         require(txBytes.length >= 10, "tx too short");
 
         // Legacy: txid = sha256d(full bytes)
         // SegWit: txid = sha256d(stripped serialization excluding marker/flag + witness)
-        bool isSegwit = (txBytes.length >= 6 && txBytes[4] == 0x00 && txBytes[5] == 0x01);
+        bool isSegwit = (txBytes.length >= 6 &&
+            txBytes[4] == 0x00 &&
+            txBytes[5] == 0x01);
 
         if (!isSegwit) {
             return BTCUtils.sha256d(txBytes);
@@ -321,7 +333,7 @@ contract BtcVerifierToken is BitcoinHeaderChain, MerkleProofBTC {
             }
         }
 
-        // locktime must be last 4 bytes
+        // locktime must be present (last 4 bytes in real tx)
         require(p + 4 <= txBytes.length, "locktime oob");
         bytes memory locktime = _sliceMem(txBytes, p, 4);
 
@@ -337,11 +349,9 @@ contract BtcVerifierToken is BitcoinHeaderChain, MerkleProofBTC {
     // ----------------
     // Transaction parsing (enforce 2 outputs + extract output0 PKH)
     // ----------------
-    function _parseFirstOutputAndExtractPKH(bytes memory txBytes)
-        internal
-        pure
-        returns (uint64 valueSats, bytes20 pubKeyHash)
-    {
+    function _parseFirstOutputAndExtractPKH(
+        bytes memory txBytes
+    ) internal pure returns (uint64 valueSats, bytes20 pubKeyHash) {
         require(txBytes.length >= 10, "tx too short");
 
         uint256 p = 0;
@@ -401,7 +411,11 @@ contract BtcVerifierToken is BitcoinHeaderChain, MerkleProofBTC {
 
     function _isP2PKH(bytes memory s) internal pure returns (bool) {
         if (s.length != 25) return false;
-        return (s[0] == 0x76 && s[1] == 0xa9 && s[2] == 0x14 && s[23] == 0x88 && s[24] == 0xac);
+        return (s[0] == 0x76 &&
+            s[1] == 0xa9 &&
+            s[2] == 0x14 &&
+            s[23] == 0x88 &&
+            s[24] == 0xac);
     }
 
     function _isP2PK(bytes memory s) internal pure returns (bool) {
@@ -425,7 +439,10 @@ contract BtcVerifierToken is BitcoinHeaderChain, MerkleProofBTC {
     // ----------------
     // Minimal memory parsing helpers (canonical VarInt + LE uint64)
     // ----------------
-    function _readVarIntMem(bytes memory b, uint256 p) internal pure returns (uint256 v, uint256 size) {
+    function _readVarIntMem(
+        bytes memory b,
+        uint256 p
+    ) internal pure returns (uint256 v, uint256 size) {
         require(p < b.length, "varint oob");
         uint8 fb = uint8(b[p]);
 
@@ -433,13 +450,16 @@ contract BtcVerifierToken is BitcoinHeaderChain, MerkleProofBTC {
             return (fb, 1);
         } else if (fb == 0xfd) {
             require(p + 2 < b.length, "varint16 oob");
-            uint256 vv = uint256(uint8(b[p + 1])) | (uint256(uint8(b[p + 2])) << 8);
+            uint256 vv = uint256(uint8(b[p + 1])) |
+                (uint256(uint8(b[p + 2])) << 8);
             require(vv >= 0xfd, "varint non-canonical");
             return (vv, 3);
         } else if (fb == 0xfe) {
             require(p + 4 < b.length, "varint32 oob");
-            uint256 vv = uint256(uint8(b[p + 1])) | (uint256(uint8(b[p + 2])) << 8) | (uint256(uint8(b[p + 3])) << 16)
-                | (uint256(uint8(b[p + 4])) << 24);
+            uint256 vv = uint256(uint8(b[p + 1])) |
+                (uint256(uint8(b[p + 2])) << 8) |
+                (uint256(uint8(b[p + 3])) << 16) |
+                (uint256(uint8(b[p + 4])) << 24);
             require(vv > 0xffff, "varint non-canonical");
             return (vv, 5);
         } else {
@@ -453,16 +473,23 @@ contract BtcVerifierToken is BitcoinHeaderChain, MerkleProofBTC {
         }
     }
 
-    function _readUint64LEMem(bytes memory b, uint256 p) internal pure returns (uint64) {
+    function _readUint64LEMem(
+        bytes memory b,
+        uint256 p
+    ) internal pure returns (uint64) {
         require(p + 8 <= b.length, "uint64 oob");
         uint64 v = 0;
         for (uint256 i = 0; i < 8; i++) {
-            v |= uint64(uint8(b[p + i])) << uint64(8 * i); // avoids the uint64/uint256 shift warning
+            v |= uint64(uint8(b[p + i])) << uint64(8 * i);
         }
         return v;
     }
 
-    function _sliceMem(bytes memory data, uint256 offset, uint256 len) internal pure returns (bytes memory out) {
+    function _sliceMem(
+        bytes memory data,
+        uint256 offset,
+        uint256 len
+    ) internal pure returns (bytes memory out) {
         require(offset + len <= data.length, "slice oob");
         out = new bytes(len);
         for (uint256 i = 0; i < len; i++) {
@@ -470,12 +497,14 @@ contract BtcVerifierToken is BitcoinHeaderChain, MerkleProofBTC {
         }
     }
 
-    function _bytesToBytes20(bytes memory b, uint256 offset) internal pure returns (bytes20 out) {
+    function _bytesToBytes20(
+        bytes memory b,
+        uint256 offset
+    ) internal pure returns (bytes20 out) {
         require(offset + 20 <= b.length, "bytes20 oob");
         assembly {
             // bytes20 values are LEFT-aligned in a 32-byte word.
-            // mload(...) already returns the 20 bytes in the correct (high) position,
-            // so DO NOT shift.
+            // mload(...) returns the first 20 bytes in the correct (high) position, so DO NOT shift.
             out := mload(add(add(b, 0x20), offset))
         }
     }
