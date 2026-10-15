@@ -16,13 +16,7 @@ contract OracleFlowTest is Test {
 
     function setUp() public {
         bytes20 targetPKH = bytes20(uint160(0xAAAA));
-        token = new BtcVerifierToken(
-            CHECKPOINT,
-            HEIGHT,
-            "BVT",
-            "BVT",
-            targetPKH
-        );
+        token = new BtcVerifierToken(CHECKPOINT, HEIGHT, "BVT", "BVT", targetPKH);
     }
 
     function test_oracle_is_deployer() public {

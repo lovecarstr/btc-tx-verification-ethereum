@@ -9,16 +9,11 @@ contract Deploy is Script {
     // Accepts:
     // - 20-byte hex: 0x + 40 hex chars
     // - 32-byte hex: 0x + 64 hex chars (uses the LAST 20 bytes)
-    function _envBytes20(
-        string memory key
-    ) internal view returns (bytes20 out) {
+    function _envBytes20(string memory key) internal view returns (bytes20 out) {
         string memory s = vm.envString(key);
 
         bytes memory b = bytes(s);
-        require(
-            b.length >= 2 && b[0] == "0" && (b[1] == "x" || b[1] == "X"),
-            "env must be 0x-prefixed"
-        );
+        require(b.length >= 2 && b[0] == "0" && (b[1] == "x" || b[1] == "X"), "env must be 0x-prefixed");
 
         // Case A: exactly 20 bytes provided
         if (b.length == 42) {
@@ -52,20 +47,11 @@ contract Deploy is Script {
 
         bytes20 targetPKH = _envBytes20("TARGET_PKH");
 
-        string memory name_ = vm.envOr(
-            "TOKEN_NAME",
-            string("BTC Verifier Token")
-        );
+        string memory name_ = vm.envOr("TOKEN_NAME", string("BTC Verifier Token"));
         string memory symbol_ = vm.envOr("TOKEN_SYMBOL", string("BVT"));
 
         vm.startBroadcast(pk);
-        token = new BtcVerifierToken(
-            checkpointHash,
-            checkpointHeight,
-            name_,
-            symbol_,
-            targetPKH
-        );
+        token = new BtcVerifierToken(checkpointHash, checkpointHeight, name_, symbol_, targetPKH);
         vm.stopBroadcast();
 
         console2.log("BtcVerifierToken deployed at:", address(token));

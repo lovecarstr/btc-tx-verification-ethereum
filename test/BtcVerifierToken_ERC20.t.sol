@@ -12,15 +12,7 @@ contract BtcVerifierTokenHarness is BtcVerifierToken {
         string memory name_,
         string memory symbol_,
         bytes20 targetPKH_
-    )
-        BtcVerifierToken(
-            checkpointHash,
-            checkpointHeight,
-            name_,
-            symbol_,
-            targetPKH_
-        )
-    {}
+    ) BtcVerifierToken(checkpointHash, checkpointHeight, name_, symbol_, targetPKH_) {}
 
     function mintForTest(address to, uint256 amount) external {
         _mint(to, amount);
@@ -35,11 +27,7 @@ contract BtcVerifierTokenERC20Test is Test {
     address carl;
 
     event Transfer(address indexed from, address indexed to, uint256 value);
-    event Approval(
-        address indexed owner,
-        address indexed spender,
-        uint256 value
-    );
+    event Approval(address indexed owner, address indexed spender, uint256 value);
 
     function setUp() public {
         alice = makeAddr("alice");
@@ -47,13 +35,8 @@ contract BtcVerifierTokenERC20Test is Test {
         carl = makeAddr("carl");
 
         // ERC-20 tests don't depend on real Bitcoin headers.
-        token = new BtcVerifierTokenHarness(
-            bytes32(uint256(1)),
-            12345,
-            "BTC Verifier Token",
-            "BVT",
-            bytes20(uint160(1))
-        );
+        token =
+            new BtcVerifierTokenHarness(bytes32(uint256(1)), 12345, "BTC Verifier Token", "BVT", bytes20(uint160(1)));
     }
 
     function test_metadata_and_initial_supply() public view {
@@ -144,9 +127,7 @@ contract BtcVerifierTokenERC20Test is Test {
         token.transferFrom(alice, carl, 1);
     }
 
-    function test_transferFrom_success_moves_balance_and_decreases_allowance()
-        public
-    {
+    function test_transferFrom_success_moves_balance_and_decreases_allowance() public {
         token.mintForTest(alice, 10);
 
         vm.prank(alice);
@@ -204,9 +185,7 @@ contract BtcVerifierTokenERC20Test is Test {
         token.approve(bob, 5);
 
         vm.prank(bob);
-        (bool ok, ) = address(token).call(
-            abi.encodeWithSignature("burnFrom(address,uint256)", alice, 4)
-        );
+        (bool ok,) = address(token).call(abi.encodeWithSignature("burnFrom(address,uint256)", alice, 4));
 
         if (!ok) {
             return;

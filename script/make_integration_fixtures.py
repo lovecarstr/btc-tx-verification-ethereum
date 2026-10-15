@@ -2,7 +2,7 @@
 import json, os, sys, time, hashlib
 from urllib.request import urlopen, Request
 
-API_BASE = "https://blockstream.info/api"  # esplora-compatible APIs support /tx/:txid/hex and /tx/:txid/merkle-proof :contentReference[oaicite:0]{index=0}
+API_BASE = "https://blockstream.info/api"  # esplora-compatible APIs support /tx/:txid/hex and /tx/:txid/merkle-proof
 
 FIX_DIR = "test/fixtures"
 HEADER_PATH = os.path.join(FIX_DIR, "sample_header.hex")

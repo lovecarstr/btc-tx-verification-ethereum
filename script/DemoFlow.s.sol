@@ -22,16 +22,11 @@ import {BTCUtils} from "../src/BTCUtils.sol";
 /// - BLOCK_HASH         (canonical/explorer hash, bytes32)
 contract DemoFlow is Script {
     // -------- env helpers --------
-    function _envBytes20(
-        string memory key
-    ) internal view returns (bytes20 out) {
+    function _envBytes20(string memory key) internal view returns (bytes20 out) {
         string memory s = vm.envString(key);
 
         bytes memory b = bytes(s);
-        require(
-            b.length >= 2 && b[0] == "0" && (b[1] == "x" || b[1] == "X"),
-            "env must be 0x-prefixed"
-        );
+        require(b.length >= 2 && b[0] == "0" && (b[1] == "x" || b[1] == "X"), "env must be 0x-prefixed");
 
         if (b.length == 42) {
             bytes memory parsed = vm.parseBytes(s);
@@ -55,9 +50,7 @@ contract DemoFlow is Script {
     }
 
     // -------- file helpers --------
-    function _readHexFixture(
-        string memory path
-    ) internal view returns (bytes memory) {
+    function _readHexFixture(string memory path) internal view returns (bytes memory) {
         // Reads a file containing "0x..." or raw hex with whitespace/newlines and parses it into bytes.
         string memory s = vm.readFile(path);
         bytes memory raw = bytes(s);
@@ -68,9 +61,9 @@ contract DemoFlow is Script {
         for (uint256 i = 0; i < raw.length; i++) {
             bytes1 c = raw[i];
             if (
-                (c >= 0x30 && c <= 0x39) || // 0-9
-                (c >= 0x61 && c <= 0x66) || // a-f
-                (c >= 0x41 && c <= 0x46) // A-F
+                (c >= 0x30 && c <= 0x39) // 0-9
+                    || (c >= 0x61 && c <= 0x66) // a-f
+                    || (c >= 0x41 && c <= 0x46) // A-F
             ) {
                 hexChars[n++] = c;
             }
@@ -80,14 +73,14 @@ contract DemoFlow is Script {
         require(n % 2 == 0, "odd number of hex chars");
 
         bytes memory trimmed = new bytes(n);
-        for (uint256 j = 0; j < n; j++) trimmed[j] = hexChars[j];
+        for (uint256 j = 0; j < n; j++) {
+            trimmed[j] = hexChars[j];
+        }
 
         return vm.parseBytes(string.concat("0x", string(trimmed)));
     }
 
-    function _readProofFromJson(
-        string memory jsonPath
-    ) internal view returns (bytes32[] memory proof) {
+    function _readProofFromJson(string memory jsonPath) internal view returns (bytes32[] memory proof) {
         // expects: { "proof": ["0x..", "0x..", ...] }
         string memory json = vm.readFile(jsonPath);
         proof = vm.parseJsonBytes32Array(json, ".proof");
@@ -100,21 +93,12 @@ contract DemoFlow is Script {
         uint256 checkpointHeight = vm.envUint("CHECKPOINT_HEIGHT");
         bytes20 targetPKH = _envBytes20("TARGET_PKH");
 
-        string memory name_ = vm.envOr(
-            "TOKEN_NAME",
-            string("BTC Verifier Token")
-        );
+        string memory name_ = vm.envOr("TOKEN_NAME", string("BTC Verifier Token"));
         string memory symbol_ = vm.envOr("TOKEN_SYMBOL", string("BVT"));
 
         vm.startBroadcast(pk);
 
-        token = new BtcVerifierToken(
-            checkpointHash,
-            checkpointHeight,
-            name_,
-            symbol_,
-            targetPKH
-        );
+        token = new BtcVerifierToken(checkpointHash, checkpointHeight, name_, symbol_, targetPKH);
         console2.log("Deployed at:", address(token));
         console2.log("oracle:", token.oracle());
         console2.log("TARGET_PKH pseudo-recipient:", _pkhToAddress(targetPKH));
@@ -128,9 +112,7 @@ contract DemoFlow is Script {
             bool ok = token.oracleSubmitBlockHeader(header);
             console2.log("oracleSubmitBlockHeader ok:", ok);
 
-            bytes32 canonical = BTCUtils.reverseBytes32(
-                BTCUtils.sha256d(header)
-            );
+            bytes32 canonical = BTCUtils.reverseBytes32(BTCUtils.sha256d(header));
             console2.log("Submitted canonical block hash:");
             console2.logBytes32(canonical);
             console2.log("Known after submit:", token.isKnown(canonical));
@@ -152,12 +134,7 @@ contract DemoFlow is Script {
             console2.log("Verifying tx bytes length:", txBytes.length);
             console2.log("Proof length:", proof.length);
 
-            bool ok2 = token.verifyTransaction(
-                txBytes,
-                proof,
-                txIndex,
-                blockHash
-            );
+            bool ok2 = token.verifyTransaction(txBytes, proof, txIndex, blockHash);
             console2.log("verifyTransaction ok:", ok2);
         }
 

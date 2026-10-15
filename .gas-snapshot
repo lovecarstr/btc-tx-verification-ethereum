@@ -28,8 +28,6 @@ BtcVerifierTokenERC20Test:test_transferFrom_success_moves_balance_and_decreases_
 BtcVerifierTokenERC20Test:test_transfer_reverts_on_insufficient_balance() (gas: 16994)
 BtcVerifierTokenERC20Test:test_transfer_reverts_on_to_zero_address() (gas: 61062)
 BtcVerifierTokenERC20Test:test_transfer_success_updates_balances_and_emits() (gas: 95555)
-CounterTest:testFuzz_SetNumber(uint256) (runs: 256, μ: 28667, ~: 29289)
-CounterTest:test_Increment() (gas: 28783)
 HeaderChainTest:test_getBlockHeight_unknownReverts() (gas: 1110463)
 HeaderChainTest:test_submit_rejectsDuplicate() (gas: 1366368)
 HeaderChainTest:test_submit_rejectsInvalidPowByChangingNonce() (gas: 1268620)

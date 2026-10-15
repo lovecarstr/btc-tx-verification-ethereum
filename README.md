@@ -2,6 +2,8 @@
 
 This repository contains my coursework implementation for **ICT3009**, built in **Solidity** and tested using **Foundry**.
 
+> Solo coursework for **ICT3009 Blockchain & Smart Contracts** at the University of Malta (Erasmus exchange, 2025/26).
+
 ## What this implements (Tasks 1–5)
 - Bitcoin utilities: double-SHA256, endianness helpers, VarInt parsing
 - Bitcoin-style Merkle proof verification (double-SHA256 parent hashing)
@@ -64,7 +66,6 @@ Install docs: https://book.getfoundry.sh/
 - `sample_proof.json`
 
 ### Docs (`docs/`)
-- `docs/ai-prompts.md` — log of AI prompts used during development (coursework requirement)
 - `docs/TASK4.md` — Task 4 write-up + required explanation about PKH vs Ethereum addresses + suggested improvements
 
 ### Scripts (`script/`)
@@ -96,6 +97,7 @@ Merkle verification expects all hashes passed in the same byte order that the ha
 
 ### Build
 ```sh
+git submodule update --init --recursive   # fetch forge-std and OpenZeppelin
 forge build
 ```
 
@@ -119,7 +121,7 @@ anvil
 ```sh
 export RPC_URL="http://127.0.0.1:8545"
 
-# anvil account (0) private key (shown when you run anvil)
+# Anvil's default account (0) private key: a well-known public test key, never use it on a real network
 export PRIVATE_KEY="0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
 
 # Contract constructor inputs

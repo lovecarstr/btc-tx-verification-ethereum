@@ -8,9 +8,7 @@ import {BTCUtils} from "../src/BTCUtils.sol";
 
 contract IntegrationTest is Test {
     // --- Helpers ---
-    function _readHexFixture(
-        string memory path
-    ) internal view returns (bytes memory) {
+    function _readHexFixture(string memory path) internal view returns (bytes memory) {
         // parse "0x..." or plain hex with whitespace/newlines
         string memory s = vm.readFile(path);
         bytes memory raw = bytes(s);
@@ -21,9 +19,9 @@ contract IntegrationTest is Test {
         for (uint256 i = 0; i < raw.length; i++) {
             bytes1 c = raw[i];
             if (
-                (c >= 0x30 && c <= 0x39) || // 0-9
-                (c >= 0x61 && c <= 0x66) || // a-f
-                (c >= 0x41 && c <= 0x46) // A-F
+                (c >= 0x30 && c <= 0x39) // 0-9
+                    || (c >= 0x61 && c <= 0x66) // a-f
+                    || (c >= 0x41 && c <= 0x46) // A-F
             ) {
                 hexChars[n++] = c;
             }
@@ -33,14 +31,14 @@ contract IntegrationTest is Test {
         if (n % 2 != 0) revert("odd number of hex chars");
 
         bytes memory trimmed = new bytes(n);
-        for (uint256 j = 0; j < n; j++) trimmed[j] = hexChars[j];
+        for (uint256 j = 0; j < n; j++) {
+            trimmed[j] = hexChars[j];
+        }
 
         return vm.parseBytes(string.concat("0x", string(trimmed)));
     }
 
-    function _extractPrevCanonical(
-        bytes memory header
-    ) internal pure returns (bytes32) {
+    function _extractPrevCanonical(bytes memory header) internal pure returns (bytes32) {
         require(header.length == 80, "bad header len");
         bytes32 prevLE;
         assembly {
@@ -49,20 +47,14 @@ contract IntegrationTest is Test {
         return BTCUtils.reverseBytes32(prevLE);
     }
 
-    function _computeHashCanonical(
-        bytes memory header
-    ) internal pure returns (bytes32) {
+    function _computeHashCanonical(bytes memory header) internal pure returns (bytes32) {
         require(header.length == 80, "bad header len");
         return BTCUtils.reverseBytes32(BTCUtils.sha256d(header));
     }
 
-    function test_endToEnd_submitHeader_thenVerifySyntheticTx_thenMint()
-        public
-    {
+    function test_endToEnd_submitHeader_thenVerifySyntheticTx_thenMint() public {
         // 1) Submit a real header fixture (Task 5 oracle flow)
-        bytes memory header = _readHexFixture(
-            "test/fixtures/sample_header.hex"
-        );
+        bytes memory header = _readHexFixture("test/fixtures/sample_header.hex");
         assertEq(header.length, 80, "fixture must be 80 bytes");
 
         bytes32 checkpointHash = _extractPrevCanonical(header);
@@ -72,13 +64,8 @@ contract IntegrationTest is Test {
         bytes20 targetPKH = bytes20(uint160(0xAAAA));
 
         // oracle = this test contract (msg.sender)
-        BtcVerifierToken token = new BtcVerifierToken(
-            checkpointHash,
-            checkpointHeight,
-            "BTC Verifier Token",
-            "BVT",
-            targetPKH
-        );
+        BtcVerifierToken token =
+            new BtcVerifierToken(checkpointHash, checkpointHeight, "BTC Verifier Token", "BVT", targetPKH);
 
         assertTrue(token.oracleSubmitBlockHeader(header));
 
@@ -88,6 +75,7 @@ contract IntegrationTest is Test {
 
         // 3) Verify a synthetic tx with a 1-leaf merkle tree (proof empty, index 0)
         // output0 pays to PKH ...aaaa
+        // forgefmt: disable-start
         bytes memory txBytes = hex"0100000001"
         hex"0000000000000000000000000000000000000000000000000000000000000000"
         hex"00000000"
@@ -101,6 +89,7 @@ contract IntegrationTest is Test {
         hex"19"
         hex"76a914000000000000000000000000000000000000bbbb88ac"
         hex"00000000";
+        // forgefmt: disable-end
 
         bytes32 txid = BTCUtils.sha256d(txBytes);
 
